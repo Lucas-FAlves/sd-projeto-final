@@ -1,0 +1,27 @@
+{
+  "name": "@sd/sisu",
+  "version": "0.0.0",
+  "type": "commonjs",
+  "main": "dist/src/index.js",
+  "scripts": {
+    "start": "node .",
+    "build": "tsc --project tsconfig.json && tsc-alias -p tsconfig.json",
+    "dev": "tsx --env-file='.env' --require='@opentelemetry/auto-instrumentations-node/register' ./src/index.ts"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.30",
+    "drizzle-kit": "0.31.1",
+    "tsc-alias": "1.8.16",
+    "tsx": "4.19.4",
+    "typescript": "5.8.3"
+  },
+  "dependencies": {
+    "@libsql/client": "0.15.8",
+    "@opentelemetry/api": "1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "0.60.0",
+    "@sd/typescript-config": "*",
+    "dotenv": "16.5.0",
+    "drizzle-orm": "0.44.2",
+    "kafkajs": "2.2.4"
+  }
+}

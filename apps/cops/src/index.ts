@@ -4,26 +4,26 @@ import "@/teardown";
 import { db } from "@/db/db";
 import { users } from "@/db/schema/users";
 import { consumer } from "@/broker/consumer";
-import { tracer } from "./tracer";
+import { producer } from "./broker/producer";
 
 async function main() {
   const _users = await db.select().from(users);
   console.log(_users);
 
-  await consumer.subscribe({ topic: "cops-events", fromBeginning: true });
+  await consumer.subscribe({ topic: "process-finished", fromBeginning: true });
 
   consumer.run({
     eachMessage: async ({ message }) => {
-      const span = tracer.startSpan("received message");
-      console.log({
-        value: message?.value?.toString(),
+      console.log({ value: message.value?.toString() });
+
+      await producer.connect();
+
+      await producer.send({
+        topic: "process-finished-response",
+        messages: [{ value: "ok" }],
       });
 
-      if (message.value) {
-        span.setAttribute("message.value", message.value.toString());
-      }
-
-      span.end();
+      await producer.disconnect();
     },
   });
 }
