@@ -1,0 +1,7 @@
+{
+  "name": "@sd/typescript-config",
+  "version": "0.0.0",
+  "devDependencies": {
+    "@tsconfig/node22": "22.0.2"
+  }
+}
