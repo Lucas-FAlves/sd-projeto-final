@@ -1,12 +1,14 @@
-import { broker } from "./broker.js";
+import { broker } from "@/broker/broker";
 
 const admin = broker.admin();
 
-await admin.connect();
+export async function createTopics() {
+  await admin.connect();
 
-await admin.createTopics({
-  topics: [{ topic: "cops", numPartitions: 1 }],
-  waitForLeaders: true,
-});
+  await admin.createTopics({
+    topics: [{ topic: "cops-events", numPartitions: 1 }],
+    waitForLeaders: true,
+  });
 
-await admin.disconnect();
+  await admin.disconnect();
+}

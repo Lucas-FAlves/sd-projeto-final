@@ -1,12 +1,12 @@
 {
   "name": "@sd/cops",
   "version": "0.0.0",
-  "type": "module",
+  "type": "commonjs",
   "main": "dist/src/index.js",
   "scripts": {
-    "start": "node  .",
+    "start": "node .",
     "build": "tsc --project tsconfig.json && tsc-alias -p tsconfig.json",
-    "dev": "tsx --env-file='.env' ./src/index.ts"
+    "dev": "tsx --env-file='.env' --require='@opentelemetry/auto-instrumentations-node/register' ./src/index.ts"
   },
   "devDependencies": {
     "@types/node": "22.15.30",

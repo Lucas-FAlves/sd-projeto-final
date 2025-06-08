@@ -1,7 +1,6 @@
 {
   "name": "@sd/final",
   "version": "0.0.0",
-  "type": "module",
   "packageManager": "npm@11.4.1",
   "scripts": {
     "dev": "turbo dev"

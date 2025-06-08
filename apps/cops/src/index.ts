@@ -1,19 +1,34 @@
-import "@/bootstrap.js";
-import "@/teardown.js";
+import "@/bootstrap";
+import "@/teardown";
 
-import { db } from "@/db/db.js";
-import { users } from "@/db/schema/users.js";
-import { consumer } from "./broker/consumer.js";
+import { db } from "@/db/db";
+import { users } from "@/db/schema/users";
+import { consumer } from "@/broker/consumer";
+import { tracer } from "./tracer";
 
-const _users = await db.select().from(users);
-console.log(_users);
+async function main() {
+  const _users = await db.select().from(users);
+  console.log(_users);
 
-await consumer.subscribe({ topic: "cops", fromBeginning: true });
+  await consumer.subscribe({ topic: "cops-events", fromBeginning: true });
 
-consumer.run({
-  eachMessage: async ({ message }) => {
-    console.log({
-      value: message?.value?.toString(),
-    });
-  },
+  consumer.run({
+    eachMessage: async ({ message }) => {
+      const span = tracer.startSpan("received message");
+      console.log({
+        value: message?.value?.toString(),
+      });
+
+      if (message.value) {
+        span.setAttribute("message.value", message.value.toString());
+      }
+
+      span.end();
+    },
+  });
+}
+
+main().catch((error) => {
+  console.error("Error in main:", error);
+  process.exit(1);
 });

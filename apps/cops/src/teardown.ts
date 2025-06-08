@@ -1,4 +1,4 @@
-import { consumer } from "./broker/consumer.js";
+import { consumer } from "@/broker/consumer";
 
 async function teardown() {
   await consumer.stop();
