@@ -22,22 +22,24 @@ async function main() {
 
       const processFinishedNotification: Notification = {
         id: nanoid(),
+        to: `user-${nanoid(5)}@gmail.com`,
         message: `process ${nanoid()} finished`,
       };
 
-      await producer.send({
-        topic: "notification",
-        messages: [
-          {
-            value: JSON.stringify(processFinishedNotification),
-          },
-        ],
-      });
-
-      await producer.send({
-        topic: "process-finished-response",
-        messages: [{ value: "ok" }],
-      });
+      await Promise.all([
+        producer.send({
+          topic: "notification",
+          messages: [
+            {
+              value: JSON.stringify(processFinishedNotification),
+            },
+          ],
+        }),
+        producer.send({
+          topic: "process-finished-response",
+          messages: [{ value: "ok" }],
+        }),
+      ]);
 
       await producer.disconnect();
     },

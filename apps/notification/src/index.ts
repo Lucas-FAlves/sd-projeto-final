@@ -12,12 +12,13 @@ async function main() {
   consumer.run({
     eachMessage: async ({ message: _message }) => {
       if (_message.value) {
-        const { id, message }: Notification = JSON.parse(
+        const { id, to, message }: Notification = JSON.parse(
           _message.value.toString()
         );
 
         console.log({
           id,
+          to,
           message,
         });
       }
