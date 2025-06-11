@@ -14,8 +14,8 @@ async function main() {
   });
 
   consumer.run({
-    eachMessage: async ({ message }) => {
-      if (message.value) console.log(unmarshal(message.value));
+    eachMessage: async ({ message: { value: message } }) => {
+      if (message) console.log(unmarshal(message));
     },
   });
 

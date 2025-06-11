@@ -13,8 +13,8 @@ async function main() {
   });
 
   consumer.run({
-    eachMessage: async ({ message: _message }) => {
-      if (_message.value) console.log(unmarshal<Notification>(_message.value));
+    eachMessage: async ({ message: { value: message } }) => {
+      if (message) console.log(unmarshal<Notification>(message));
     },
   });
 }
