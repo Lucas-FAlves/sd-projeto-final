@@ -5,6 +5,8 @@ import { db } from "@/db/db";
 import { users } from "@/db/schema/users";
 import { consumer } from "@/broker/consumer";
 import { producer } from "./broker/producer";
+import { Notification } from "@sd/contracts";
+import { nanoid } from "nanoid";
 
 async function main() {
   const _users = await db.select().from(users);
@@ -17,6 +19,20 @@ async function main() {
       console.log({ value: message.value?.toString() });
 
       await producer.connect();
+
+      const processFinishedNotification: Notification = {
+        id: nanoid(),
+        message: `process ${nanoid()} finished`,
+      };
+
+      await producer.send({
+        topic: "notification",
+        messages: [
+          {
+            value: JSON.stringify(processFinishedNotification),
+          },
+        ],
+      });
 
       await producer.send({
         topic: "process-finished-response",

@@ -7,12 +7,9 @@ export async function createTopics() {
 
   try {
     const existingTopics = await admin.listTopics();
-
-    const topicsToCreate = [
-      { topic: "process-finished", numPartitions: 1 },
-      { topic: "process-finished-response", numPartitions: 1 },
-      { topic: "notification", numPartitions: 1 },
-    ].filter((topicConfig) => !existingTopics.includes(topicConfig.topic));
+    const topicsToCreate = [{ topic: "notification", numPartitions: 1 }].filter(
+      (topicConfig) => !existingTopics.includes(topicConfig.topic)
+    );
 
     if (topicsToCreate.length > 0) {
       await admin.createTopics({
