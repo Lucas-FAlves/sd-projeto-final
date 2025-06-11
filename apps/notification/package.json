@@ -17,6 +17,7 @@
   "dependencies": {
     "@opentelemetry/api": "1.9.0",
     "@opentelemetry/auto-instrumentations-node": "0.60.0",
+    "@sd/broker": "*",
     "@sd/contracts": "*",
     "@sd/typescript-config": "*",
     "kafkajs": "2.2.4",

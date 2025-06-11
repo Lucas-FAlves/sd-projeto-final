@@ -1,14 +1,14 @@
-import "@/broker/broker";
+import { broker } from "@/broker/broker";
 import { consumer } from "@/broker/consumer";
-import { createTopics } from "@/broker/topics";
-import { producer } from "./broker/producer";
+import { producer } from "@/broker/producer";
+import { ensureTopicsExist, TOPICS } from "@sd/broker";
 
-async function bootstrap() {
-  await createTopics();
+export async function bootstrap() {
+  await ensureTopicsExist(broker, [
+    TOPICS.PROCESS_FINISHED,
+    TOPICS.PROCESS_FINISHED_RESPONSE,
+    TOPICS.NOTIFICATION,
+  ]);
   await consumer.connect();
+  await producer.connect();
 }
-
-bootstrap().catch((error) => {
-  console.error("Error during bootstrap:", error);
-  process.exit(1);
-});

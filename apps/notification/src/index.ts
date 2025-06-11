@@ -1,27 +1,20 @@
-import "@/bootstrap";
 import "@/teardown";
+import { bootstrap } from "@/bootstrap";
 import { consumer } from "./broker/consumer";
 import { Notification } from "@sd/contracts";
+import { TOPICS, unmarshal } from "@sd/broker";
 
 async function main() {
+  await bootstrap();
+
   await consumer.subscribe({
-    topic: "notification",
+    topic: TOPICS.NOTIFICATION,
     fromBeginning: true,
   });
 
   consumer.run({
     eachMessage: async ({ message: _message }) => {
-      if (_message.value) {
-        const { id, to, message }: Notification = JSON.parse(
-          _message.value.toString()
-        );
-
-        console.log({
-          id,
-          to,
-          message,
-        });
-      }
+      if (_message.value) console.log(unmarshal<Notification>(_message.value));
     },
   });
 }

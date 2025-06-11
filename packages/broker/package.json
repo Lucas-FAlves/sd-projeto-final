@@ -1,0 +1,8 @@
+{
+  "name": "@sd/broker",
+  "version": "0.0.0",
+  "type": "commonjs",
+  "dependencies": {
+    "kafkajs": "2.2.4"
+  }
+}

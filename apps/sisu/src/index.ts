@@ -1,28 +1,28 @@
-import "@/bootstrap";
 import "@/teardown";
-import { producer } from "./broker/producer";
-import { consumer } from "./broker/consumer";
+
+import { bootstrap } from "@/bootstrap";
+import { producer } from "@/broker/producer";
+import { consumer } from "@/broker/consumer";
+import { marshal, TOPICS, unmarshal } from "@sd/broker";
 
 async function main() {
+  await bootstrap();
+
   await consumer.subscribe({
-    topic: "process-finished-response",
+    topic: TOPICS.PROCESS_FINISHED_RESPONSE,
     fromBeginning: true,
   });
 
   consumer.run({
     eachMessage: async ({ message }) => {
-      console.log({ value: message.value?.toString() });
+      if (message.value) console.log(unmarshal(message.value));
     },
   });
 
-  await producer.connect();
-
   await producer.send({
-    topic: "process-finished",
-    messages: [{ value: Math.random().toString() }],
+    topic: TOPICS.PROCESS_FINISHED,
+    messages: [{ value: marshal({ result: Math.random() }) }],
   });
-
-  await producer.disconnect();
 }
 
 main().catch((error) => {

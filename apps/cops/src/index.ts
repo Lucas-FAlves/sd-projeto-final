@@ -1,47 +1,47 @@
-import "@/bootstrap";
 import "@/teardown";
 
+import { bootstrap } from "@/bootstrap";
 import { db } from "@/db/db";
 import { users } from "@/db/schema/users";
 import { consumer } from "@/broker/consumer";
-import { producer } from "./broker/producer";
+import { producer } from "@/broker/producer";
 import { Notification } from "@sd/contracts";
 import { nanoid } from "nanoid";
+import { marshal, TOPICS, unmarshal } from "@sd/broker";
 
 async function main() {
+  await bootstrap();
+
   const _users = await db.select().from(users);
   console.log(_users);
 
-  await consumer.subscribe({ topic: "process-finished", fromBeginning: true });
+  await consumer.subscribe({
+    topic: TOPICS.PROCESS_FINISHED,
+    fromBeginning: true,
+  });
 
   consumer.run({
     eachMessage: async ({ message }) => {
-      console.log({ value: message.value?.toString() });
-
-      await producer.connect();
-
-      const processFinishedNotification: Notification = {
-        id: nanoid(),
-        to: `user-${nanoid(5)}@gmail.com`,
-        message: `process ${nanoid()} finished`,
-      };
+      if (message.value) console.log(unmarshal(message.value));
 
       await Promise.all([
         producer.send({
           topic: "notification",
           messages: [
             {
-              value: JSON.stringify(processFinishedNotification),
+              value: marshal<Notification>({
+                id: nanoid(),
+                to: `user-${nanoid(5)}@gmail.com`,
+                message: `process ${nanoid()} finished`,
+              }),
             },
           ],
         }),
         producer.send({
-          topic: "process-finished-response",
-          messages: [{ value: "ok" }],
+          topic: TOPICS.PROCESS_FINISHED_RESPONSE,
+          messages: [{ value: marshal({ response: "ok" }) }],
         }),
       ]);
-
-      await producer.disconnect();
     },
   });
 }
