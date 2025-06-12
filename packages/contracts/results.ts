@@ -1,4 +1,5 @@
 export type Results = {
+    id: string;
     exam: Exam;
     grades: Grade[];
 };
