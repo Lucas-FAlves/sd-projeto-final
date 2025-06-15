@@ -5,7 +5,7 @@ export type Results = {
 };
 
 export type Grade = {
-    studentId: string;
+    userId: number;
     grade: number; 
 }
 
