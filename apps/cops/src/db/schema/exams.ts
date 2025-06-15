@@ -5,6 +5,8 @@ import {
   real,
 } from "drizzle-orm/sqlite-core";
 
+import { users } from '@/db/schema/users';
+
 const createTable = sqliteTableCreator((name) => `${name}`);
 
 export const exams = createTable("exam", {
@@ -14,6 +16,7 @@ export const exams = createTable("exam", {
 });
 
 export const results = createTable("result", {
-  id: int("exam_id").references(() => exams.id),
+  exam_id: int("exam_id").references(() => exams.id),
+  user_id: int("user_id").references(() => users.id),
   grade: real("grade").notNull(),
 });

@@ -9,24 +9,31 @@ import { producer } from "@/broker/producer";
 import { Notification, Feedback, Results } from "@sd/contracts";
 import { nanoid } from "nanoid";
 import { marshal, TOPICS } from "@sd/broker";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
+
+async function simulateDB() {
+  for(let i = 0; i < 10; i++){
+    await db.insert(users)
+      .values({
+        id: i,
+        name: "student" + i,
+        age: i + 20,
+        email: "student" + i + "@example.com"
+      })
+  }
+}
 
 async function main() {
   await bootstrap();
 
-  // (temporário) insere 5 usuários no BD, ignorando conflitos de email
-  await db.insert(users).values([
-    { name: "Student1", age: 21, email: "student1@example.com" },
-    { name: "Student2", age: 23, email: "student2@example.com" },
-    { name: "Student3", age: 25, email: "student3@example.com" },
-    { name: "Student4", age: 27, email: "student4@example.com" },
-    { name: "Student5", age: 29, email: "student5@example.com" },
-  ]).onConflictDoNothing(); // evita erro se o email já existir
+  // simula o banco de dados de usuários
+  await simulateDB();
 
-  // assina o tópico PROCESS_FINISHED
-  await consumer.subscribe({ topic: TOPICS.PROCESS_FINISHED, fromBeginning: true });
+  await consumer.subscribe({
+    topic: TOPICS.PROCESS_FINISHED,
+    fromBeginning: true
+  });
 
-  // executa o consumidor
   await consumer.run({
     eachMessage: async ({ topic, message: { value } }) => {
       if (!value) return;
@@ -34,7 +41,7 @@ async function main() {
       if (topic === TOPICS.PROCESS_FINISHED) {
         const parsed: Results = JSON.parse(value.toString());
 
-        // verifica se o exame já existe
+        // verifica se o exame já existe no banco de dados
         const [existingExam] = await db
           .select()
           .from(exams)
@@ -43,9 +50,13 @@ async function main() {
         let examId: number;
 
         if (existingExam) {
-          examId = existingExam.id;
+        // se o exame já tiver sido criado,
+
+          examId = existingExam.id; // recupera o identificador
         } else {
-          // insere o exame no BD
+        // se o exame não existir,
+
+          // insere o exame no banco de dados
           const inserted = await db
             .insert(exams)
             .values({
@@ -55,16 +66,18 @@ async function main() {
             .returning({ id: exams.id });
 
           examId = inserted[0].id;
-
-          // insere as notas dos candidatos no BD
-          for (const grade of parsed.grades) {
-            await db.insert(results).values({
-              id: examId,
-              grade: grade.grade,
-            });
-          }
         }
 
+        // insere as notas do BD
+        for (const grade of parsed.grades) {
+          await db.insert(results).values({
+            exam_id: examId,
+            user_id: grade.userId,
+            grade: grade.grade,
+          });
+        }
+
+        // envia um feedback ao sistema de PS
         await producer.send({
           topic: TOPICS.PROCESS_FINISHED_RESPONSE,
           messages: [{
@@ -75,38 +88,33 @@ async function main() {
           }],
         });
 
-        // (to-do) organizar lista preliminar de aprovados
+        // gera lista preliminar de aprovados
+        const ranked = await db
+          .select({
+            name: users.name,
+            email: users.email,
+            grade: results.grade,
+          })
+          .from(results)
+          .innerJoin(users, eq(users.id, results.user_id))
+          .where(eq(results.exam_id, examId))
+          .orderBy(desc(results.grade));
 
-        // notifica todos os usuários
-        const _users = await db.select().from(users);
-
-        const notificationMessages = _users.map((user) => ({
+        const notificationMessages = ranked.map((user, index) => ({
           value: marshal<Notification>({
             id: nanoid(),
             to: user.email,
-            // (to-do) devolver posição na lista preliminar
-            message: `Process ${nanoid()} finished`,
-          }),
-        }));
-
-        // (to-do) verificar recursos de nota
-        // (to-do) solicitar validação de documentos
-        // (to-do) organizar lista final de aprovados
-
-        const finalNotificationMessages = _users.map((user) => ({
-          value: marshal<Notification>({
-            id: nanoid(),
-            to: user.email,
-            // (to-do) devolver posição na lista final
-            message: `Process ${nanoid()} finished`,
+            message: `Você está em ${index + 1}º lugar no exame ${parsed.exam.name}.`,
           }),
         }));
 
         await Promise.all([
+          // notifica o resultado preliminar aos candidatos
           producer.send({
             topic: TOPICS.NOTIFICATION,
             messages: notificationMessages,
           }),
+          // envia um feedback ao sistema de PS
           producer.send({
             topic: TOPICS.PROCESS_FINISHED_RESPONSE,
             messages: [{

@@ -18,14 +18,19 @@ async function main() {
         id: nanoid(),
         exam: {
           name: "SISU",
-          date: "2025-06-12"
+          date: "2025"
         },
         grades: [
-          { studentId: "student1", grade: 1.0 },
-          { studentId: "student2", grade: 3.0 },
-          { studentId: "student3", grade: 5.0 },
-          { studentId: "student4", grade: 7.0 },
-          { studentId: "student5", grade: 9.0 }
+          { userId: 0, grade: 0.0 },
+          { userId: 1, grade: 1.0 },
+          { userId: 2, grade: 2.0 },
+          { userId: 3, grade: 3.0 },
+          { userId: 4, grade: 4.0 },
+          { userId: 5, grade: 5.0 },
+          { userId: 6, grade: 6.0 },
+          { userId: 7, grade: 7.0 },
+          { userId: 8, grade: 8.0 },
+          { userId: 9, grade: 9.0 }
         ]
       }),
     }],
@@ -37,6 +42,7 @@ async function main() {
     fromBeginning: true,
   });
 
+  // imprime o resultado preliminar
   consumer.run({
     eachMessage: async ({ message: { value: message } }) => {
       if (message) console.log(unmarshal(message));
