@@ -8,9 +8,7 @@ import { ExamResults } from "@sd/contracts";
 import { nanoid } from "nanoid";
 import { faker } from "@faker-js/faker";
 
-async function main() {
-  await bootstrap();
-
+async function sendExamResults() {
   await producer.send({
     topic: TOPICS.PROCESS_FINISHED,
     messages: [
@@ -34,6 +32,11 @@ async function main() {
       },
     ],
   });
+  console.log("Sent exam results at", new Date().toISOString());
+}
+
+async function main() {
+  await bootstrap();
 
   await consumer.subscribe({
     topic: TOPICS.PROCESS_FINISHED_RESPONSE,
@@ -45,6 +48,24 @@ async function main() {
       if (message) console.log(unmarshal(message));
     },
   });
+
+  await sendExamResults();
+
+  const intervalId = setInterval(async () => {
+    try {
+      await sendExamResults();
+    } catch (error) {
+      console.error("Error sending exam results:", error);
+    }
+  }, 30000);
+
+  process.on("SIGINT", () => {
+    console.log("Shutting down...");
+    clearInterval(intervalId);
+    process.exit(0);
+  });
+
+  console.log("SISU service started - sending exam results every 30 seconds");
 }
 
 main().catch((error) => {
