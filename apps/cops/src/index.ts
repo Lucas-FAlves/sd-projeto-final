@@ -2,36 +2,22 @@ import "@/teardown";
 
 import { bootstrap } from "@/bootstrap";
 import { db } from "@/db/db";
-import { users } from "@/db/schema/users";
-import { exams, results } from "@/db/schema/exams";
 import { consumer } from "@/broker/consumer";
 import { producer } from "@/broker/producer";
-import { Notification, Feedback, Results } from "@sd/contracts";
+import { Notification, Feedback, ExamResults } from "@sd/contracts";
 import { nanoid } from "nanoid";
-import { marshal, TOPICS } from "@sd/broker";
-import { eq, desc } from "drizzle-orm";
+import { marshal, TOPICS, unmarshal } from "@sd/broker";
+import { eq, desc, and } from "drizzle-orm";
+import { candidates, examResults, exams } from "./db/schema/exams-results";
 
-async function simulateDB() {
-  for(let i = 0; i < 10; i++){
-    await db.insert(users)
-      .values({
-        id: i,
-        name: "student" + i,
-        age: i + 20,
-        email: "student" + i + "@example.com"
-      })
-  }
-}
+const APPROVAL_LIMIT = 20;
 
 async function main() {
   await bootstrap();
 
-  // simula o banco de dados de usuários
-  await simulateDB();
-
   await consumer.subscribe({
     topic: TOPICS.PROCESS_FINISHED,
-    fromBeginning: true
+    fromBeginning: true,
   });
 
   await consumer.run({
@@ -39,27 +25,23 @@ async function main() {
       if (!value) return;
 
       if (topic === TOPICS.PROCESS_FINISHED) {
-        const parsed: Results = JSON.parse(value.toString());
+        const parsed = unmarshal<ExamResults>(value);
 
-        // verifica se o exame já existe no banco de dados
-        const [existingExam] = await db
+        const existingExam = await db
           .select()
           .from(exams)
-          .where(eq(exams.name, parsed.exam.name));
+          .where(eq(exams.id, parsed.exam.id))
+          .limit(1);
 
-        let examId: number;
+        let examId: string;
 
-        if (existingExam) {
-        // se o exame já tiver sido criado,
-
-          examId = existingExam.id; // recupera o identificador
+        if (existingExam.length > 0) {
+          examId = existingExam[0].id;
         } else {
-        // se o exame não existir,
-
-          // insere o exame no banco de dados
           const inserted = await db
             .insert(exams)
             .values({
+              id: parsed.exam.id,
               name: parsed.exam.name,
               date: parsed.exam.date,
             })
@@ -68,61 +50,109 @@ async function main() {
           examId = inserted[0].id;
         }
 
-        // insere as notas do BD
-        for (const grade of parsed.grades) {
-          await db.insert(results).values({
-            exam_id: examId,
-            user_id: grade.userId,
-            grade: grade.grade,
+        for (const result of parsed.results) {
+          await db.transaction(async (tx) => {
+            await tx
+              .insert(candidates)
+              .values({
+                id: result.candidate.id,
+                name: result.candidate.name,
+                email: result.candidate.email,
+              })
+              .onConflictDoNothing();
+
+            await tx.insert(examResults).values({
+              candidateId: result.candidate.id,
+              examId: examId,
+              grade: result.grade,
+            });
           });
         }
 
-        // envia um feedback ao sistema de PS
         await producer.send({
           topic: TOPICS.PROCESS_FINISHED_RESPONSE,
-          messages: [{
-            value: marshal<Feedback>({
-              id: nanoid(),
-              message: "COPS: Resultados recebidos e processados com sucesso.",
-            }),
-          }],
+          messages: [
+            {
+              value: marshal<Feedback>({
+                id: nanoid(),
+                message:
+                  "COPS: Resultados recebidos e processados com sucesso.",
+              }),
+            },
+          ],
         });
 
-        // gera lista preliminar de aprovados
+        await db.transaction(async (tx) => {
+          const approvedCandidates = await tx
+            .select()
+            .from(examResults)
+            .where(eq(examResults.examId, examId))
+            .orderBy(desc(examResults.grade))
+            .limit(APPROVAL_LIMIT);
+
+          const updates = approvedCandidates.map((candidate, index) => {
+            return tx
+              .update(examResults)
+              .set({
+                isApproved: true,
+                approvalRank: index + 1,
+              })
+              .where(
+                and(
+                  eq(examResults.examId, examId),
+                  eq(examResults.candidateId, candidate.candidateId)
+                )
+              );
+          });
+
+          await Promise.all(updates);
+        });
+
         const ranked = await db
           .select({
-            name: users.name,
-            email: users.email,
-            grade: results.grade,
+            id: candidates.id,
+            name: candidates.name,
+            email: candidates.email,
+            grade: examResults.grade,
+            approvalRank: examResults.approvalRank,
           })
-          .from(results)
-          .innerJoin(users, eq(users.id, results.user_id))
-          .where(eq(results.exam_id, examId))
-          .orderBy(desc(results.grade));
+          .from(examResults)
+          .innerJoin(candidates, eq(examResults.candidateId, candidates.id))
+          .where(
+            and(
+              eq(examResults.examId, examId),
+              eq(examResults.isApproved, true)
+            )
+          )
+          .orderBy(desc(examResults.approvalRank));
 
-        const notificationMessages = ranked.map((user, index) => ({
+        const notificationMessages = ranked.map((user) => ({
           value: marshal<Notification>({
             id: nanoid(),
             to: user.email,
-            message: `Você está em ${index + 1}º lugar no exame ${parsed.exam.name}.`,
+            message: `Você foi aprovado no exame ${parsed.exam.name} (${
+              parsed.exam.id
+            }) com nota ${user.grade.toFixed(2)} e está em ${
+              user.approvalRank
+            }º lugar.`,
           }),
         }));
 
         await Promise.all([
-          // notifica o resultado preliminar aos candidatos
           producer.send({
             topic: TOPICS.NOTIFICATION,
             messages: notificationMessages,
           }),
-          // envia um feedback ao sistema de PS
           producer.send({
             topic: TOPICS.PROCESS_FINISHED_RESPONSE,
-            messages: [{
-              value: marshal<Feedback>({
-                id: nanoid(),
-                message: "COPS: Processo seletivo deferido.",
-              }),
-            }],
+            messages: [
+              {
+                value: marshal<Feedback>({
+                  id: nanoid(),
+                  message: "COPS: Processo seletivo deferido.",
+                }),
+              },
+            ],
           }),
         ]);
       }
