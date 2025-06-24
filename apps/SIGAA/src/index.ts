@@ -11,23 +11,8 @@ import { nanoid } from "nanoid";
 import { marshal, TOPICS } from "@sd/broker";
 import { eq, desc } from "drizzle-orm";
 
-async function simulateDB() {
-  for(let i = 0; i < 10; i++){
-    await db.insert(users)
-      .values({
-        id: i,
-        name: "student" + i,
-        age: i + 20,
-        email: "student" + i + "@example.com"
-      })
-  }
-}
-
 async function main() {
   await bootstrap();
-
-  // simula o banco de dados de usuários
-  await simulateDB();
 
   await consumer.subscribe({
     topic: TOPICS.REGISTER_SOLICITED,
@@ -60,11 +45,11 @@ async function main() {
               value: marshal<Feedback>(response),
             },
           ],
-        });
+          });
+      }
     }
-  }
-})
-
+  })
+}
 main().catch((error) => {
   console.error("Error in main:", error);
   process.exit(1);
