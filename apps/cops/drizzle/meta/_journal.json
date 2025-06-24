@@ -5,15 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1749339912576,
-      "tag": "0000_dark_longshot",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1749340099369,
-      "tag": "0001_dark_lucky_pierre",
+      "when": 1750366851346,
+      "tag": "0000_charming_scarecrow",
       "breakpoints": true
     }
   ]

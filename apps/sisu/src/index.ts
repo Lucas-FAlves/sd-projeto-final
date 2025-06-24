@@ -4,50 +4,68 @@ import { bootstrap } from "@/bootstrap";
 import { producer } from "@/broker/producer";
 import { consumer } from "@/broker/consumer";
 import { marshal, TOPICS, unmarshal } from "@sd/broker";
-import { Results, Feedback } from "@sd/contracts";
+import { ExamResults } from "@sd/contracts";
 import { nanoid } from "nanoid";
+import { faker } from "@faker-js/faker";
+
+async function sendExamResults() {
+  await producer.send({
+    topic: TOPICS.PROCESS_FINISHED,
+    messages: [
+      {
+        value: marshal<ExamResults>({
+          id: nanoid(),
+          exam: {
+            date: faker.date.recent().toISOString(),
+            id: nanoid(),
+            name: "SISU",
+          },
+          results: Array.from({ length: 100 }, () => ({
+            candidate: {
+              id: nanoid(),
+              name: faker.person.fullName(),
+              email: faker.internet.email(),
+            },
+            grade: faker.number.float({ min: 0, max: 10, fractionDigits: 2 }),
+          })),
+        }),
+      },
+    ],
+  });
+  console.log("Sent exam results at", new Date().toISOString());
+}
 
 async function main() {
   await bootstrap();
 
-  // envia os resultados para a COPS
-  await producer.send({
-    topic: TOPICS.PROCESS_FINISHED,
-    messages: [{
-      value: marshal<Results>({
-        id: nanoid(),
-        exam: {
-          name: "SISU",
-          date: "2025"
-        },
-        grades: [
-          { userId: 0, grade: 0.0 },
-          { userId: 1, grade: 1.0 },
-          { userId: 2, grade: 2.0 },
-          { userId: 3, grade: 3.0 },
-          { userId: 4, grade: 4.0 },
-          { userId: 5, grade: 5.0 },
-          { userId: 6, grade: 6.0 },
-          { userId: 7, grade: 7.0 },
-          { userId: 8, grade: 8.0 },
-          { userId: 9, grade: 9.0 }
-        ]
-      }),
-    }],
-  });
-
-  // espera a mensagem de feedback da COPS
   await consumer.subscribe({
     topic: TOPICS.PROCESS_FINISHED_RESPONSE,
     fromBeginning: true,
   });
 
-  // imprime o resultado preliminar
   consumer.run({
     eachMessage: async ({ message: { value: message } }) => {
       if (message) console.log(unmarshal(message));
     },
   });
+
+  await sendExamResults();
+
+  const intervalId = setInterval(async () => {
+    try {
+      await sendExamResults();
+    } catch (error) {
+      console.error("Error sending exam results:", error);
+    }
+  }, 30000);
+
+  process.on("SIGINT", () => {
+    console.log("Shutting down...");
+    clearInterval(intervalId);
+    process.exit(0);
+  });
+
+  console.log("SISU service started - sending exam results every 30 seconds");
 }
 
 main().catch((error) => {
