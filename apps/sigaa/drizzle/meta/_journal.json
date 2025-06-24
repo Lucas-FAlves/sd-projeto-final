@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1750793401512,
+      "tag": "0000_bouncy_snowbird",
+      "breakpoints": true
+    }
+  ]
+}

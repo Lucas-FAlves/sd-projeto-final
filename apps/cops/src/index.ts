@@ -138,10 +138,41 @@ async function main() {
           }),
         }));
 
+        const reprovedCandidates = await db
+          .select({
+            id: candidates.id,
+            name: candidates.name,
+            email: candidates.email,
+            grade: examResults.grade,
+          })
+          .from(examResults)
+          .innerJoin(candidates, eq(examResults.candidateId, candidates.id))
+          .where(
+            and(
+              eq(examResults.examId, examId),
+              eq(examResults.isApproved, false)
+            )
+          )
+          .orderBy(desc(examResults.grade));
+
+        const reprovedMessages = reprovedCandidates.map((user) => ({
+          value: marshal<Notification>({
+            id: nanoid(),
+            to: user.email,
+            message: `Você foi reprovado no exame ${parsed.exam.name} (${
+              parsed.exam.id
+            }) com nota ${user.grade.toFixed(2)}.`,
+          }),
+        }));
+
         await Promise.all([
           producer.send({
             topic: TOPICS.NOTIFICATION,
             messages: notificationMessages,
+          }),
+          producer.send({
+            topic: TOPICS.NOTIFICATION,
+            messages: reprovedMessages,
           }),
           producer.send({
             topic: TOPICS.PROCESS_FINISHED_RESPONSE,

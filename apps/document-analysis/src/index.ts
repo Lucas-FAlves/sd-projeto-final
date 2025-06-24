@@ -1,15 +1,10 @@
 import "@/teardown";
 
 import { bootstrap } from "@/bootstrap";
-import { db } from "@/db/db";
-import { users } from "@/db/schema/users";
-import { exams, results } from "@/db/schema/exams";
+
 import { consumer } from "@/broker/consumer";
 import { producer } from "@/broker/producer";
-import { Notification, Feedback, Results } from "@sd/contracts";
-import { nanoid } from "nanoid";
-import { marshal, TOPICS } from "@sd/broker";
-import { eq, desc } from "drizzle-orm";
+import { marshal, TOPICS, unmarshal } from "@sd/broker";
 
 async function main() {
   await bootstrap();
@@ -45,7 +40,9 @@ async function main() {
           ],
         });
 
-        console.log(`Resposta enviada para ID ${response.id} com status ${response.status}`);
+        console.log(
+          `Resposta enviada para ID ${response.id} com status ${response.status}`
+        );
       }
     },
   });
