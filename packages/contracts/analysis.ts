@@ -1,4 +1,4 @@
-export type Feedback = {
+export type Analysis = {
     id: string,
-    message: string,
+    status: number,
 }
