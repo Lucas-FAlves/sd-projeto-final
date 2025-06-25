@@ -5,14 +5,20 @@ import { db } from "@/db/db";
 import { students } from "@/db/schema/student";
 import { consumer } from "@/broker/consumer";
 import { producer } from "@/broker/producer";
-import { Feedback, StudentReg } from "@sd/contracts";
+import {
+  Candidate,
+  DocumentReviewed,
+  Feedback,
+  ProcessFinished,
+  StudentReg,
+} from "@sd/contracts";
 import { marshal, TOPICS, unmarshal } from "@sd/broker";
 
 async function main() {
   await bootstrap();
 
   await consumer.subscribe({
-    topic: TOPICS.REGISTER_SOLICITED,
+    topics: [TOPICS.DOCUMENT_REVIEWED],
     fromBeginning: true,
   });
 
@@ -20,28 +26,29 @@ async function main() {
     eachMessage: async ({ topic, message: { value } }) => {
       if (!value) return;
 
-      if (topic === TOPICS.REGISTER_SOLICITED) {
-        const student: StudentReg = unmarshal<StudentReg>(value);
+      if (topic === TOPICS.DOCUMENT_REVIEWED) {
+        const parsed = unmarshal<DocumentReviewed>(value);
 
-        const [newStudent] = await db
-          .insert(students)
-          .values({
-            name: student.name,
-            age: student.age,
-            email: student.email,
-          })
-          .returning();
+        if (parsed.status === "rejected") {
+          return;
+        }
 
-        const response: Feedback = {
-          id: newStudent.id.toString(),
-          message: `${newStudent.name} matriculado com sucesso sob matricula ${newStudent.id}.`,
-        };
+        await db.insert(students).values({
+          id: parsed.candidate.id,
+          name: parsed.candidate.name,
+          email: parsed.candidate.email,
+          age: parsed.candidate.age,
+        });
 
         await producer.send({
-          topic: TOPICS.REGISTER_FINISHED,
+          topic: TOPICS.NOTIFICATION,
           messages: [
             {
-              value: marshal<Feedback>(response),
+              value: marshal<Notification>({
+                id: parsed.candidate.id,
+                to: parsed.candidate.email,
+                message: `Olá ${parsed.candidate.name}, sua matricula foi realizada com sucesso!`,
+              }),
             },
           ],
         });

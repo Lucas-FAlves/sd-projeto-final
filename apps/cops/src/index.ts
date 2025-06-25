@@ -4,19 +4,26 @@ import { bootstrap } from "@/bootstrap";
 import { db } from "@/db/db";
 import { consumer } from "@/broker/consumer";
 import { producer } from "@/broker/producer";
-import { Notification, Feedback, ExamResults } from "@sd/contracts";
+import {
+  ProcessFinished,
+  Notification,
+  Appeal,
+  ExamResults,
+  AwaitingAppeals,
+} from "@sd/contracts";
 import { nanoid } from "nanoid";
 import { marshal, TOPICS, unmarshal } from "@sd/broker";
 import { eq, desc, and } from "drizzle-orm";
 import { candidates, examResults, exams } from "./db/schema/exams-results";
+import { faker } from "@faker-js/faker";
 
-const APPROVAL_LIMIT = 20;
+const APPROVAL_LIMIT = 5;
 
 async function main() {
   await bootstrap();
 
   await consumer.subscribe({
-    topic: TOPICS.PROCESS_FINISHED,
+    topics: [TOPICS.EXAM_FINISHED, TOPICS.APPEAL_REQUESTED],
     fromBeginning: true,
   });
 
@@ -24,7 +31,7 @@ async function main() {
     eachMessage: async ({ topic, message: { value } }) => {
       if (!value) return;
 
-      if (topic === TOPICS.PROCESS_FINISHED) {
+      if (topic === TOPICS.EXAM_FINISHED) {
         const parsed = unmarshal<ExamResults>(value);
 
         const existingExam = await db
@@ -68,19 +75,6 @@ async function main() {
             });
           });
         }
-
-        await producer.send({
-          topic: TOPICS.PROCESS_FINISHED_RESPONSE,
-          messages: [
-            {
-              value: marshal<Feedback>({
-                id: nanoid(),
-                message:
-                  "COPS: Resultados recebidos e processados com sucesso.",
-              }),
-            },
-          ],
-        });
 
         await db.transaction(async (tx) => {
           const approvedCandidates = await tx
@@ -126,7 +120,7 @@ async function main() {
           )
           .orderBy(desc(examResults.approvalRank));
 
-        const notificationMessages = ranked.map((user) => ({
+        const approvedMessages = ranked.map((user) => ({
           value: marshal<Notification>({
             id: nanoid(),
             to: user.email,
@@ -168,24 +162,66 @@ async function main() {
         await Promise.all([
           producer.send({
             topic: TOPICS.NOTIFICATION,
-            messages: notificationMessages,
+            messages: [...approvedMessages, ...reprovedMessages],
           }),
           producer.send({
-            topic: TOPICS.NOTIFICATION,
-            messages: reprovedMessages,
-          }),
-          producer.send({
-            topic: TOPICS.PROCESS_FINISHED_RESPONSE,
+            topic: TOPICS.AWAITING_APPEALS,
             messages: [
               {
-                value: marshal<Feedback>({
+                value: marshal<AwaitingAppeals>({
                   id: nanoid(),
-                  message: "COPS: Processo seletivo deferido.",
+                  message: `Exame ${parsed.exam.name} (${parsed.exam.id}) finalizado. Aguardando recursos.`,
+                  approvedCandidates: ranked.map((user) => ({
+                    id: user.id,
+                    name: user.name,
+                    email: user.email,
+                  })),
                 }),
               },
             ],
           }),
         ]);
+
+        setTimeout(async () => {
+          console.log(
+            "Process finished event fired at",
+            new Date().toISOString()
+          );
+          await producer.send({
+            topic: TOPICS.PROCESS_FINISHED,
+            messages: [
+              {
+                value: marshal<ProcessFinished>({
+                  id: nanoid(),
+                  examId: parsed.exam.id,
+                  approvedCandidates: ranked.map((user) => ({
+                    id: user.id,
+                    name: user.name,
+                    email: user.email,
+                    age: faker.number.int({ min: 18, max: 40 }),
+                  })),
+                }),
+              },
+            ],
+          });
+        }, 1 * 1000);
+      }
+
+      if (topic === TOPICS.APPEAL_REQUESTED) {
+        const parsed = unmarshal<Appeal>(value);
+
+        await producer.send({
+          topic: TOPICS.NOTIFICATION,
+          messages: [
+            {
+              value: marshal<Notification>({
+                id: nanoid(),
+                to: parsed.candidate.email,
+                message: `Seu recurso infelizmente foi indeferido após análise ${parsed.candidate.name}`,
+              }),
+            },
+          ],
+        });
       }
     },
   });

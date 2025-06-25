@@ -5,12 +5,14 @@ import { bootstrap } from "@/bootstrap";
 import { consumer } from "@/broker/consumer";
 import { producer } from "@/broker/producer";
 import { marshal, TOPICS, unmarshal } from "@sd/broker";
+import { DocumentReviewed, ProcessFinished } from "@sd/contracts";
+import { nanoid } from "nanoid";
 
 async function main() {
   await bootstrap();
 
   await consumer.subscribe({
-    topic: TOPICS.ANALYSIS_SOLICITED,
+    topic: TOPICS.PROCESS_FINISHED,
     fromBeginning: true,
   });
 
@@ -18,31 +20,24 @@ async function main() {
     eachMessage: async ({ topic, message: { value } }) => {
       if (!value) return;
 
-      if (topic === TOPICS.ANALYSIS_SOLICITED) {
-        const received = unmarshal<Analysis>(value);
-
-        const response: Analysis = {
-          id: received.id,
-          status: received.status,
-        };
-
-        if (received.status === 0) {
-          const result = Math.random() < 0.5 ? 1 : -1;
-          response.status = result;
-        }
+      if (topic === TOPICS.PROCESS_FINISHED) {
+        const parsed = unmarshal<ProcessFinished>(value);
 
         await producer.send({
-          topic: TOPICS.ANALYSIS_RESULTS,
-          messages: [
-            {
-              value: marshal<Analysis>(response),
-            },
-          ],
+          topic: TOPICS.DOCUMENT_REVIEWED,
+          messages: parsed.approvedCandidates.map((candidate) => {
+            return {
+              value: marshal<DocumentReviewed>({
+                id: nanoid(),
+                examId: parsed.examId,
+                candidate,
+                status: ["approved", "rejected"][
+                  Math.floor(Math.random() * 2)
+                ] as "approved" | "rejected",
+              }),
+            };
+          }),
         });
-
-        console.log(
-          `Resposta enviada para ID ${response.id} com status ${response.status}`
-        );
       }
     },
   });

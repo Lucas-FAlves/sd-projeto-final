@@ -4,13 +4,19 @@ import { bootstrap } from "@/bootstrap";
 import { producer } from "@/broker/producer";
 import { consumer } from "@/broker/consumer";
 import { marshal, TOPICS, unmarshal } from "@sd/broker";
-import { ExamResults } from "@sd/contracts";
+import { AwaitingAppeals, ExamResults, Appeal } from "@sd/contracts";
 import { nanoid } from "nanoid";
 import { faker } from "@faker-js/faker";
 
+// Store candidates that want to request appeal
+let candidatesToRequestAppeal: Array<{
+  candidate: { id: string; name: string; email: string };
+  grade: number;
+}> = [];
+
 async function sendSisuResults() {
   await producer.send({
-    topic: TOPICS.PROCESS_FINISHED,
+    topic: TOPICS.EXAM_FINISHED,
     messages: [
       {
         value: marshal<ExamResults>({
@@ -20,7 +26,7 @@ async function sendSisuResults() {
             id: nanoid(),
             name: "SISU",
           },
-          results: Array.from({ length: 100 }, () => ({
+          results: Array.from({ length: 20 }, () => ({
             candidate: {
               id: nanoid(),
               name: faker.person.fullName(),
@@ -35,8 +41,8 @@ async function sendSisuResults() {
   console.log("Sent exam results at", new Date().toISOString());
 }
 
-async function internalExamClojure() {
-  const candidatesResults = Array.from({ length: 100 }, () => ({
+async function sendInternalExamResults() {
+  const candidatesResults = Array.from({ length: 10 }, () => ({
     candidate: {
       id: nanoid(),
       name: faker.person.fullName(),
@@ -45,12 +51,13 @@ async function internalExamClojure() {
     grade: faker.number.float({ min: 0, max: 10, fractionDigits: 2 }),
   }));
 
-  const candidatesToRequestAppeal = [...candidatesResults].filter(
-    (result) => result.grade < 5 && Math.random() < 0.1
+  // Update the global candidates list for appeal requests
+  candidatesToRequestAppeal = [...candidatesResults].filter(
+    (result) => Math.random() < 0.7
   );
 
   await producer.send({
-    topic: TOPICS.PROCESS_FINISHED,
+    topic: TOPICS.EXAM_FINISHED,
     messages: [
       {
         value: marshal<ExamResults>({
@@ -58,7 +65,7 @@ async function internalExamClojure() {
           exam: {
             date: faker.date.recent().toISOString(),
             id: nanoid(),
-            name: "SISU",
+            name: "Processo Seletivo Interno",
           },
           results: candidatesResults,
         }),
@@ -66,29 +73,59 @@ async function internalExamClojure() {
     ],
   });
 
-  console.log("Sent exam results at", new Date().toISOString());
+  console.log("Sent internal exam results at", new Date().toISOString());
+}
 
-  await consumer.run({
-    eachMessage: async ({ topic, message: { value } }) => {},
+async function handleAppeals() {
+  await consumer.subscribe({
+    topic: TOPICS.AWAITING_APPEALS,
+    fromBeginning: true,
+  });
+
+  consumer.run({
+    eachMessage: async ({ message: { value: message } }) => {
+      if (message) {
+        const parsed = unmarshal<AwaitingAppeals>(message);
+
+        const nonApprovedCandidates = candidatesToRequestAppeal.filter(
+          (result) =>
+            !parsed.approvedCandidates.some(
+              (candidate) => candidate.id === result.candidate.id
+            )
+        );
+
+        if (nonApprovedCandidates.length > 0) {
+          await producer.send({
+            topic: TOPICS.APPEAL_REQUESTED,
+            messages: nonApprovedCandidates.map((c) => {
+              return {
+                value: marshal<Appeal>({
+                  id: nanoid(),
+                  candidate: c.candidate,
+                  grade: c.grade,
+                }),
+              };
+            }),
+          });
+
+          candidatesToRequestAppeal = [];
+
+          console.log(
+            `Sent ${nonApprovedCandidates.length} appeal requests at`,
+            new Date().toISOString()
+          );
+        }
+      }
+    },
   });
 }
 
 async function main() {
   await bootstrap();
 
-  await consumer.subscribe({
-    topic: TOPICS.PROCESS_FINISHED_RESPONSE,
-    fromBeginning: true,
-  });
-
-  consumer.run({
-    eachMessage: async ({ message: { value: message } }) => {
-      if (message) console.log(unmarshal(message));
-    },
-  });
-
   await sendSisuResults();
-  await internalExamClojure();
+  await sendInternalExamResults();
+  await handleAppeals();
 
   const sisuInterval = setInterval(async () => {
     try {
@@ -96,15 +133,15 @@ async function main() {
     } catch (error) {
       console.error("Error sending exam results:", error);
     }
-  }, 5 * 60 * 1000);
+  }, 0.5 * 60 * 1000);
 
   const internalInterval = setInterval(async () => {
     try {
-      await internalExamClojure();
+      await sendInternalExamResults();
     } catch (error) {
       console.error("Error sending internal exam results:", error);
     }
-  }, 5 * 60 * 1000);
+  }, 0.5 * 60 * 1000);
 
   process.on("SIGINT", () => {
     console.log("Shutting down...");

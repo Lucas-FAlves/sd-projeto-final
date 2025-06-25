@@ -5,8 +5,10 @@ import { producer } from "@/broker/producer";
 
 export async function bootstrap() {
   await ensureTopicsExist(broker, [
-    TOPICS.REGISTER_FINISHED,
-    TOPICS.REGISTER_SOLICITED,
+    TOPICS.DOCUMENT_REVIEWED,
+    TOPICS.PROCESS_FINISHED,
+    TOPICS.REGISTRATION_FINISHED,
+    TOPICS.NOTIFICATION,
   ]);
   await consumer.connect();
   await producer.connect();

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "0d6b0764-5e81-4f67-91ba-0ff298c51684",
+  "id": "30840ff6-9911-4c20-8a5e-2afab62bee68",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "students": {
@@ -9,10 +9,10 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
+          "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "autoincrement": true
+          "autoincrement": false
         },
         "name": {
           "name": "name",
